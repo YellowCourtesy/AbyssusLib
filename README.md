@@ -1,37 +1,44 @@
 # AbyssusLib
 
-Shared code for SKSE plugins (Skyrim SE/AE). License: GPL-3.0.
+An SKSE plugin with shared services for other SKSE plugins (Skyrim AE 1.7.x).
+License: GPL-3.0. Requires SKSE64 and Address Library for SKSE Plugins.
 
-## Notifications (`include/Abyssus/Notify.h`)
+## Notes and status lines
 
-An on-screen note box, drawn with Dear ImGui on Direct3D 11, in place of the
-game's notification queue. Only the newest notes show (4 by default); older
-notes are dropped, never queued, so a note is never minutes old.
+A small box at the top of the screen, drawn with Dear ImGui on Direct3D 11, in
+place of the game's notification queue.
 
-All plugins in one game process share one box: the first plugin that calls
-`abyssus::Init()` hooks Present and draws; the others send their notes to it.
-Plugins can link different copies of AbyssusLib, if the API version is the same.
+- **Notes:** all plugins share one note. A new note replaces the note that shows
+  (the same rule as SkyrimDiagnostics), so a note is never minutes old.
+- **Status lines:** each plugin can show one permanent line, until it changes or
+  clears it.
+
+## Use from another plugin
+
+Copy `include/Abyssus/API.h` into your plugin (it needs CommonLibSSE-NG). Nothing
+to link: the header finds `AbyssusLib.dll` at runtime.
 
 ```cpp
-#include "Abyssus/Notify.h"
+#include "Abyssus/API.h"
 
-// At SKSE kDataLoaded:
-auto* window = RE::BSGraphics::Renderer::GetCurrentRenderWindow();
-abyssus::Init(window->swapChain);
+if (abyssus::IsAvailable())  // at or after SKSE kPostLoad
+    abyssus::Notify("MyMod", "Something happened", 5.0f);
+abyssus::SetStatus("MyMod", "Working: step 2 of 5");
+abyssus::SetStatus("MyMod", nullptr);  // clear
+```
 
-// From any thread:
-abyssus::Notify("MyMod", "Something happened", 5.0f);
+If AbyssusLib is not installed, the calls do nothing; use a fallback.
+
+## Build
+
+GitHub Actions builds every push; the artifact is ready for Mod Organizer 2.
+Local build (Visual Studio developer prompt, `VCPKG_ROOT` set):
+
+```
+git submodule update --init --recursive
+cmake --preset release
+cmake --build build --target AbyssusLib
 ```
 
 The overlay code (Present hook, ImGui setup, game UI render target) comes from
 SkyrimDiagnostics.
-
-## Use in a CMake project
-
-1. Add this repo as a git submodule, for example in `lib/abyssuslib`.
-2. In the vcpkg manifest, add `{ "name": "imgui", "features": ["dx11-binding"] }`.
-3. In `CMakeLists.txt`:
-   ```cmake
-   add_subdirectory(lib/abyssuslib)
-   target_link_libraries(MyPlugin PRIVATE AbyssusLib::AbyssusLib)
-   ```
