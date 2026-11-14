@@ -10,6 +10,8 @@
 
 #include <cstdint>
 
+#include "REX/W32/KERNEL32.h"
+
 namespace abyssus
 {
 	inline constexpr int kApiVersion = 1;
