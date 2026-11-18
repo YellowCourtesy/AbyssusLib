@@ -1,11 +1,13 @@
 #include "Overlay.h"
 
+#include "Abyssus/API.h"
+
 // AbyssusLib: shared services for the author's SKSE plugins.
 // Other plugins use include/Abyssus/API.h, which finds these exports at runtime.
 
 extern "C" __declspec(dllexport) int AbyssusAPI_Version()
 {
-	return 1;
+	return abyssus::kApiVersion;
 }
 
 extern "C" __declspec(dllexport) void AbyssusAPI_Notify(const char* a_source, const char* a_text, float a_seconds, int a_level)
@@ -16,6 +18,11 @@ extern "C" __declspec(dllexport) void AbyssusAPI_Notify(const char* a_source, co
 extern "C" __declspec(dllexport) void AbyssusAPI_SetStatus(const char* a_source, const char* a_text)
 {
 	abyssus::overlay::SetStatus(a_source, a_text);
+}
+
+extern "C" __declspec(dllexport) void AbyssusAPI_SetWindow(const char* a_source, const char* a_id, const AbyssusWindow* a_window)
+{
+	abyssus::overlay::SetWindow(a_source, a_id, a_window);
 }
 
 namespace

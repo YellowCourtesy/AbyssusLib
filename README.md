@@ -13,6 +13,16 @@ place of the game's notification queue.
 - **Status lines:** each plugin can show one permanent line, until it changes or
   clears it.
 
+## Windows (API version 2)
+
+A plugin can show its own windows. The plugin sends the content as data:
+colored text, line ends, separators and line graphs. AbyssusLib draws it. The
+plugin has no Dear ImGui and no Present hook for drawing.
+
+- A window shows until the plugin changes or clears it.
+- `below`: the id of another window of the same plugin. If that window shows,
+  this window goes below it. If not, at its own position.
+
 ## Use from another plugin
 
 Copy `include/Abyssus/API.h` into your plugin (it needs CommonLibSSE-NG). Nothing
@@ -25,7 +35,23 @@ if (abyssus::IsAvailable())  // at or after SKSE kPostLoad
     abyssus::Notify("MyMod", "Something happened", 5.0f);
 abyssus::SetStatus("MyMod", "Working: step 2 of 5");
 abyssus::SetStatus("MyMod", nullptr);  // clear
+
+// Windows: AbyssusLib 2 or later.
+static abyssus::WindowBuilder b;
+b.Clear();
+b.Text(abyssus::WindowBuilder::kDefault, "FPS ");
+b.Text({ 1.0f, 0.35f, 0.3f, 1.0f }, "%.0f", fps);  // same line, red
+b.NewLine();
+b.Graph(values, count, 0.0f, 50.0f, 380.0f, 50.0f);
+const AbyssusWindow w = b.Make(10.0f, 10.0f);  // top left corner, pixels
+abyssus::SetWindow("MyMod", "main", &w);
+abyssus::ClearWindow("MyMod", "main");
 ```
+
+`IsAvailable()` is true for notes and status lines; `HasWindows()` is true if
+the installed AbyssusLib has windows.
+
+Code without CommonLibSSE can use the header too: include `windows.h` before it.
 
 If AbyssusLib is not installed, the calls do nothing; use a fallback.
 

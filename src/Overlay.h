@@ -1,6 +1,9 @@
 #pragma once
 
-// The note box: Present hook and Dear ImGui on Direct3D 11. No CommonLibSSE.
+// The note box and the plugin windows: Present hook and Dear ImGui on Direct3D 11.
+// No CommonLibSSE.
+
+struct AbyssusWindow;  // include/Abyssus/API.h
 
 namespace abyssus::overlay
 {
@@ -18,4 +21,5 @@ namespace abyssus::overlay
 	// Safe from all threads. Usable before Install(): the text shows when the box is ready.
 	void Notify(const char* a_source, const char* a_text, float a_seconds, int a_level);
 	void SetStatus(const char* a_source, const char* a_text);
+	void SetWindow(const char* a_source, const char* a_id, const AbyssusWindow* a_window);
 }

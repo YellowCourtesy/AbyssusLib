@@ -10,6 +10,8 @@
 #include <imgui.h>
 #include <imgui_impl_dx11.h>
 
+#include "Abyssus/API.h"
+
 #include <algorithm>
 #include <atomic>
 #include <cstdint>
@@ -20,6 +22,8 @@
 // Direct3D 11 and Dear ImGui only (no CommonLibSSE in this file). The overlay code
 // (Present hook, ImGui setup, game UI render target) comes from SkyrimDiagnostics,
 // and the note rule too: one note at a time, a new note replaces the one that shows.
+// Plugin windows: the plugins send the content as data (AbyssusWindow), this file
+// draws it. The plugins have no ImGui.
 
 namespace abyssus::overlay
 {
@@ -34,9 +38,34 @@ namespace abyssus::overlay
 			LARGE_INTEGER start{};
 		};
 
+		// A copy of an AbyssusItem, with its own text and values.
+		struct Item
+		{
+			int                type{ kAbyssusText };
+			AbyssusColor       color{};
+			std::string        text;
+			std::vector<float> values;
+			float              graphMin{ 0.0f };
+			float              graphMax{ 0.0f };
+			float              width{ 0.0f };
+			float              height{ 0.0f };
+		};
+
+		struct Window
+		{
+			std::string       source;
+			std::string       below;  // key of the window above this one, or empty
+			float             x{ 0.0f };
+			float             y{ 0.0f };
+			float             backgroundAlpha{ 0.6f };
+			float             wrapWidth{ 0.0f };
+			std::vector<Item> items;
+		};
+
 		SRWLOCK                            g_lock = SRWLOCK_INIT;
 		Note                               g_note;      // the note that shows (empty text: none)
 		std::map<std::string, std::string> g_statuses;  // source -> permanent status line
+		std::map<std::string, Window>      g_windows;   // "source/id" -> window
 		Options                            g_options;
 		LARGE_INTEGER                      g_frequency{};
 
@@ -156,10 +185,102 @@ namespace abyssus::overlay
 			ImGui::End();
 		}
 
+		std::string WindowKey(const char* a_source, const char* a_id)
+		{
+			return std::string(a_source ? a_source : "") + "/" + (a_id ? a_id : "");
+		}
+
+		// Gives the bottom edge of the window, in pixels.
+		float BuildWindow(const std::string& a_key, const Window& a_window, float a_y)
+		{
+			float bottom = a_y;
+			ImGui::SetNextWindowPos(ImVec2(a_window.x, a_y), ImGuiCond_Always);
+			ImGui::SetNextWindowBgAlpha(std::clamp(a_window.backgroundAlpha, 0.0f, 1.0f));
+			const ImGuiWindowFlags flags = ImGuiWindowFlags_NoDecoration | ImGuiWindowFlags_AlwaysAutoResize | ImGuiWindowFlags_NoSavedSettings |
+			                               ImGuiWindowFlags_NoFocusOnAppearing | ImGuiWindowFlags_NoNav | ImGuiWindowFlags_NoInputs;
+			if (ImGui::Begin(("##" + a_key).c_str(), nullptr, flags)) {
+				if (a_window.wrapWidth > 0.0f)
+					ImGui::PushTextWrapPos(a_window.wrapWidth);
+				bool lineOpen = false;  // a text is on the current line
+				for (const auto& item : a_window.items) {
+					switch (item.type) {
+					case kAbyssusText:
+						{
+							if (lineOpen)
+								ImGui::SameLine(0.0f, 0.0f);
+							const ImVec4 color = item.color.a > 0.0f ? ImVec4(item.color.r, item.color.g, item.color.b, item.color.a) :
+							                                           ImGui::GetStyleColorVec4(ImGuiCol_Text);
+							ImGui::TextColored(color, "%s", item.text.c_str());
+							lineOpen = true;
+						}
+						break;
+					case kAbyssusNewLine:
+						if (!lineOpen)
+							ImGui::NewLine();  // an empty line
+						lineOpen = false;
+						break;
+					case kAbyssusSeparator:
+						ImGui::Separator();
+						lineOpen = false;
+						break;
+					case kAbyssusGraph:
+						{
+							const bool colored = item.color.a > 0.0f;
+							if (colored)
+								ImGui::PushStyleColor(ImGuiCol_PlotLines, ImVec4(item.color.r, item.color.g, item.color.b, item.color.a));
+							ImGui::PlotLines(("##graph" + std::to_string(&item - a_window.items.data())).c_str(), item.values.data(),
+								static_cast<int>(item.values.size()), 0, nullptr, item.graphMin, item.graphMax, ImVec2(item.width, item.height));
+							if (colored)
+								ImGui::PopStyleColor();
+							lineOpen = false;
+						}
+						break;
+					default:
+						break;
+					}
+				}
+				if (a_window.wrapWidth > 0.0f)
+					ImGui::PopTextWrapPos();
+				bottom = ImGui::GetWindowPos().y + ImGui::GetWindowSize().y;
+			}
+			ImGui::End();
+			return bottom;
+		}
+
+		// Plugin windows. A window with "below" goes under that window when it shows.
+		void BuildWindows()
+		{
+			AcquireSRWLockShared(&g_lock);
+			std::map<std::string, float> bottoms;  // key -> bottom of the drawn window
+			std::vector<const std::pair<const std::string, Window>*> waiting;
+			for (const auto& entry : g_windows)
+				waiting.push_back(&entry);
+			// Each pass draws the windows whose upper window is drawn or does not show.
+			for (int pass = 0; pass < 8 && !waiting.empty(); ++pass) {
+				std::vector<const std::pair<const std::string, Window>*> next;
+				for (const auto* entry : waiting) {
+					const Window& window = entry->second;
+					float         y = window.y;
+					if (!window.below.empty() && g_windows.contains(window.below)) {
+						const auto above = bottoms.find(window.below);
+						if (above == bottoms.end() && pass < 7) {
+							next.push_back(entry);  // the upper window is not drawn yet
+							continue;
+						}
+						if (above != bottoms.end())
+							y = above->second + 6.0f;
+					}
+					bottoms[entry->first] = BuildWindow(entry->first, window, y);
+				}
+				waiting = std::move(next);
+			}
+			ReleaseSRWLockShared(&g_lock);
+		}
+
 		void Draw(IDXGISwapChain* a_swapChain, float a_deltaSeconds)
 		{
 			AcquireSRWLockShared(&g_lock);
-			const bool empty = g_note.text.empty() && g_statuses.empty();
+			const bool empty = g_note.text.empty() && g_statuses.empty() && g_windows.empty();
 			ReleaseSRWLockShared(&g_lock);
 			if (empty) {
 				return;  // nothing to draw: no cost in normal frames
@@ -189,6 +310,7 @@ namespace abyssus::overlay
 			io.DeltaTime = a_deltaSeconds > 0.0f ? a_deltaSeconds : 1.0f / 60.0f;
 			ImGui_ImplDX11_NewFrame();
 			ImGui::NewFrame();
+			BuildWindows();
 			BuildNotes(io.DisplaySize);
 			ImGui::Render();
 
@@ -272,6 +394,44 @@ namespace abyssus::overlay
 			g_statuses.erase(source);
 		else
 			g_statuses[source] = a_text;
+		ReleaseSRWLockExclusive(&g_lock);
+	}
+
+	void SetWindow(const char* a_source, const char* a_id, const AbyssusWindow* a_window)
+	{
+		const std::string key = WindowKey(a_source, a_id);
+		if (!a_window || a_window->itemCount <= 0 || !a_window->items) {
+			AcquireSRWLockExclusive(&g_lock);
+			g_windows.erase(key);
+			ReleaseSRWLockExclusive(&g_lock);
+			return;
+		}
+		// The copy is made before the lock: the render thread waits less.
+		Window window;
+		window.source = a_source ? a_source : "";
+		window.below = a_window->below && *a_window->below ? WindowKey(a_source, a_window->below) : std::string{};
+		window.x = a_window->x;
+		window.y = a_window->y;
+		window.backgroundAlpha = a_window->backgroundAlpha;
+		window.wrapWidth = a_window->wrapWidth;
+		window.items.reserve(static_cast<std::size_t>(a_window->itemCount));
+		for (int i = 0; i < a_window->itemCount; ++i) {
+			const AbyssusItem& in = a_window->items[i];
+			Item               item;
+			item.type = in.type;
+			item.color = in.color;
+			if (in.text)
+				item.text = in.text;
+			if (in.values && in.valueCount > 0)
+				item.values.assign(in.values, in.values + in.valueCount);
+			item.graphMin = in.graphMin;
+			item.graphMax = in.graphMax;
+			item.width = in.width;
+			item.height = in.height;
+			window.items.push_back(std::move(item));
+		}
+		AcquireSRWLockExclusive(&g_lock);
+		g_windows[key] = std::move(window);
 		ReleaseSRWLockExclusive(&g_lock);
 	}
 }
