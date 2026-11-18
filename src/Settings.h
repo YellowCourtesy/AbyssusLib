@@ -8,24 +8,27 @@
 // values (the player's lines stay), and the version line changes.
 
 #include <filesystem>
+#include <map>
 #include <string>
 #include <vector>
 
 namespace abyssus::settings
 {
-	// The parts of the stack that a configuration can show.
-	enum Group : unsigned
-	{
-		kDiag = 1u << 0,    // SkyrimDiagnostics
-		kGps = 1u << 1,     // SkyGPS
-		kOthers = 1u << 2,  // all other plugins
-		kNotif = 1u << 3,   // the notification queue
-	};
-
+	// A configuration of the cycle: its name and the groups that show
+	// (lower case). "others" and "notif" are special: see AbyssusLib.ini.
 	struct Config
 	{
-		std::string name;
-		unsigned    groups{ 0 };
+		std::string              name;
+		std::vector<std::string> groups;
+
+		bool Shows(const std::string& a_group) const
+		{
+			for (const auto& group : groups) {
+				if (group == a_group)
+					return true;
+			}
+			return false;
+		}
 	};
 
 	struct Settings
@@ -34,13 +37,15 @@ namespace abyssus::settings
 		int                 startConfig{ 0 };  // index in configs
 		float               labelSeconds{ 3.0f };
 		std::vector<Config> configs;
+		std::map<std::string, std::string> groups;  // lower-case plugin name -> lower-case group ([Groups])
+		std::map<std::string, int>         order;   // lower-case plugin name -> place ([Order])
 
 		std::vector<std::string> added;  // what this version added to the file
 		std::string              oldVersion;
 		std::string              error;  // empty = the file was read (and written) correctly
 	};
 
-	// The default configurations: Diag / GPS / Notif, GPS / Notif, GPS, Notif, Off.
+	// The configurations of the default text.
 	std::vector<Config> DefaultConfigs();
 
 	// Reads the file. Makes it with the default values if it is not there,

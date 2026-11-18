@@ -18,6 +18,8 @@ namespace abyssus::overlay
 		int                           startConfig{ 0 };
 		float                         labelSeconds{ 3.0f };
 		std::vector<settings::Config> configs{ settings::DefaultConfigs() };
+		std::map<std::string, std::string> groups;  // [Groups]
+		std::map<std::string, int>         order;   // [Order]
 	};
 
 	// Hooks Present of the swap chain (IDXGISwapChain*). Call one time.
@@ -27,5 +29,6 @@ namespace abyssus::overlay
 	void Notify(const char* a_source, const char* a_text, float a_seconds, int a_level);
 	void SetStatus(const char* a_source, const char* a_text);
 	void SetWindow(const char* a_source, const char* a_id, const AbyssusWindow* a_window);
+	void SetSourceInfo(const char* a_source, const char* a_group, int a_order);
 	void SetNote(const char* a_source, const char* a_id, const char* a_text, int a_level);
 }

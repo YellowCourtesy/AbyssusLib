@@ -14,7 +14,10 @@
 
 #include <algorithm>
 #include <atomic>
+#include <cctype>
+#include <cstddef>
 #include <cstdint>
+#include <cstring>
 #include <map>
 #include <string>
 #include <vector>
@@ -64,15 +67,13 @@ namespace abyssus::overlay
 			std::vector<Item> items;
 		};
 
-		// The stack at the top left, from top to bottom:
-		//   1. SkyrimDiagnostics (Diag)
-		//   2. SkyGPS (GPS)
-		//   3. all other plugins, in the order in which they first showed a window or status
-		//   4. the notification queue (Notif), oldest note at the top
-		// Each plugin: its windows, then its status line. Version 2.1 will read
-		// this order from a file; now it is fixed here.
-		constexpr const char* kDiagSource = "SkyrimDiagnostics";
-		constexpr const char* kGpsSource = "SkyGPS";
+		// The stack at the top left, from top to bottom: the plugins in their
+		// order, then the notification queue (oldest note at the top). Each
+		// plugin: its windows, then its status line. This file knows no plugin
+		// by name: the group and the place of a plugin come from AbyssusLib.ini
+		// ([Groups], [Order]) or from the plugin (SetSourceInfo); the ini wins.
+		// No place: kNoOrder, in the order of the first window or status.
+		constexpr int         kNoOrder = 1000;
 		constexpr float       kStackX = 10.0f;
 		constexpr float       kStackY = 10.0f;
 		constexpr float       kGap = 6.0f;
@@ -85,7 +86,14 @@ namespace abyssus::overlay
 		std::uint64_t                               g_nextId = 1;  // window order
 		std::map<std::string, std::string>          g_statuses;    // source -> permanent status line
 		std::map<std::string, Window>               g_windows;     // "source/id" -> window
-		std::vector<std::string>                    g_otherSources;  // other plugins, in the order of their first window or status
+		std::vector<std::string>                    g_sources;     // all plugins, in the order of their first window or status
+
+		struct SourceInfo
+		{
+			std::string group;  // lower case, empty = none
+			int         order{ kNoOrder };
+		};
+		std::map<std::string, SourceInfo> g_sourceInfo;  // plugin -> what it told (SetSourceInfo)
 		Options                                     g_options;
 		LARGE_INTEGER                               g_frequency{};
 
@@ -101,27 +109,54 @@ namespace abyssus::overlay
 			return static_cast<float>(static_cast<double>(a_to.QuadPart - a_from.QuadPart) / static_cast<double>(g_frequency.QuadPart));
 		}
 
+		std::string Lower(std::string a_text)
+		{
+			std::transform(a_text.begin(), a_text.end(), a_text.begin(), [](unsigned char a_c) { return static_cast<char>(std::tolower(a_c)); });
+			return a_text;
+		}
+
 		// Call with g_lock held for writing.
 		void NoteSource(const std::string& a_source)
 		{
-			if (a_source == kDiagSource || a_source == kGpsSource)
-				return;
-			if (std::find(g_otherSources.begin(), g_otherSources.end(), a_source) == g_otherSources.end())
-				g_otherSources.push_back(a_source);
+			if (std::find(g_sources.begin(), g_sources.end(), a_source) == g_sources.end())
+				g_sources.push_back(a_source);
+		}
+
+		// The group of a plugin for the configurations. A group that no
+		// configuration names is "others". Call with g_lock held.
+		std::string GroupOf(const std::string& a_source)
+		{
+			std::string group;
+			if (const auto ini = g_options.groups.find(Lower(a_source)); ini != g_options.groups.end())
+				group = ini->second;
+			else if (const auto told = g_sourceInfo.find(a_source); told != g_sourceInfo.end())
+				group = told->second.group;
+			if (group.empty() || group == "notif")
+				return "others";
+			for (const auto& config : g_options.configs) {
+				if (config.Shows(group))
+					return group;
+			}
+			return "others";
+		}
+
+		int OrderOf(const std::string& a_source)
+		{
+			if (const auto ini = g_options.order.find(Lower(a_source)); ini != g_options.order.end())
+				return ini->second;
+			if (const auto told = g_sourceInfo.find(a_source); told != g_sourceInfo.end())
+				return told->second.order;
+			return kNoOrder;
 		}
 
 		bool SourceVisible(const std::string& a_source, const Config& a_config)
 		{
-			if (a_source == kDiagSource)
-				return (a_config.groups & settings::kDiag) != 0;
-			if (a_source == kGpsSource)
-				return (a_config.groups & settings::kGps) != 0;
-			return (a_config.groups & settings::kOthers) != 0;
+			return a_config.Shows(GroupOf(a_source));
 		}
 
 		const Config& CurrentConfig()
 		{
-			static const Config none{ "Off", 0 };
+			static const Config none{ "Off", {} };
 			return g_options.configs.empty() ? none : g_options.configs[static_cast<std::size_t>(g_config) % g_options.configs.size()];
 		}
 
@@ -330,10 +365,7 @@ namespace abyssus::overlay
 			LARGE_INTEGER now;
 			QueryPerformanceCounter(&now);
 			const Config& config = CurrentConfig();
-			const bool    diag = (config.groups & settings::kDiag) != 0;
-			const bool    gps = (config.groups & settings::kGps) != 0;
-			const bool    others = (config.groups & settings::kOthers) != 0;
-			const bool    notes = (config.groups & settings::kNotif) != 0;
+			const bool    notes = config.Shows("notif");
 
 			AcquireSRWLockExclusive(&g_lock);
 			std::erase_if(g_notes, [&](const Note& a_note) { return a_note.key.empty() && Seconds(a_note.start, now) > a_note.seconds; });
@@ -341,12 +373,11 @@ namespace abyssus::overlay
 
 			AcquireSRWLockShared(&g_lock);
 			float y = kStackY;
-			if (diag)
-				y = BuildSource(kDiagSource, y);
-			if (gps)
-				y = BuildSource(kGpsSource, y);
-			if (others) {
-				for (const auto& source : g_otherSources)
+			// The plugins by place; the same place: in the order of their first window.
+			std::vector<std::string> sources = g_sources;
+			std::stable_sort(sources.begin(), sources.end(), [](const std::string& a, const std::string& b) { return OrderOf(a) < OrderOf(b); });
+			for (const auto& source : sources) {
+				if (SourceVisible(source, config))
 					y = BuildSource(source, y);
 			}
 			if (notes) {
@@ -379,7 +410,7 @@ namespace abyssus::overlay
 			const Config& config = CurrentConfig();
 			bool          any = false;
 			AcquireSRWLockShared(&g_lock);
-			if ((config.groups & settings::kNotif) != 0 && !g_notes.empty())
+			if (config.Shows("notif") && !g_notes.empty())
 				any = true;
 			for (auto it = g_windows.begin(); !any && it != g_windows.end(); ++it)
 				any = SourceVisible(it->second.source, config);
@@ -531,11 +562,33 @@ namespace abyssus::overlay
 		ReleaseSRWLockExclusive(&g_lock);
 	}
 
-	void SetWindow(const char* a_source, const char* a_id, const AbyssusWindow* a_window)
+	void SetSourceInfo(const char* a_source, const char* a_group, int a_order)
+	{
+		if (!a_source || !*a_source)
+			return;
+		AcquireSRWLockExclusive(&g_lock);
+		g_sourceInfo[a_source] = SourceInfo{ a_group ? Lower(a_group) : std::string{}, a_order };
+		ReleaseSRWLockExclusive(&g_lock);
+	}
+
+	void SetWindow(const char* a_source, const char* a_id, const AbyssusWindow* a_plugin)
 	{
 		const std::string source = a_source ? a_source : "";
 		const std::string id = a_id ? a_id : "";
 		const std::string key = source + "/" + id;
+
+		// The records of the plugin can be smaller (older plugin) or larger
+		// (newer plugin) than the records of this file. Copy only the bytes
+		// that both have; the other fields stay 0. The fields of version 2.0
+		// must be there: a record is never smaller.
+		constexpr int kMinWindowSize = static_cast<int>(offsetof(AbyssusWindow, itemCount) + sizeof(int));
+		constexpr int kMinItemSize = static_cast<int>(offsetof(AbyssusItem, height) + sizeof(float));
+		AbyssusWindow windowData{};
+		const AbyssusWindow* a_window = nullptr;
+		if (a_plugin && a_plugin->size >= kMinWindowSize && a_plugin->itemSize >= kMinItemSize) {
+			std::memcpy(&windowData, a_plugin, (std::min)(static_cast<std::size_t>(a_plugin->size), sizeof(AbyssusWindow)));
+			a_window = &windowData;
+		}
 		if (!a_window || a_window->itemCount <= 0 || !a_window->items) {
 			AcquireSRWLockExclusive(&g_lock);
 			g_windows.erase(key);
@@ -550,9 +603,12 @@ namespace abyssus::overlay
 		window.backgroundAlpha = a_window->backgroundAlpha;
 		window.wrapWidth = a_window->wrapWidth;
 		window.items.reserve(static_cast<std::size_t>(a_window->itemCount));
+		const auto* bytes = reinterpret_cast<const unsigned char*>(a_window->items);
+		const auto  step = static_cast<std::size_t>(a_window->itemSize);
 		for (int i = 0; i < a_window->itemCount; ++i) {
-			const AbyssusItem& in = a_window->items[i];
-			Item               item;
+			AbyssusItem in{};
+			std::memcpy(&in, bytes + static_cast<std::size_t>(i) * step, (std::min)(step, sizeof(AbyssusItem)));
+			Item item;
 			item.type = in.type;
 			item.color = in.color;
 			if (in.text)

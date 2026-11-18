@@ -25,23 +25,16 @@ namespace abyssus::settings
 			return a_text;
 		}
 
-		unsigned ParseGroups(const std::string& a_text)
+		std::vector<std::string> ParseGroups(const std::string& a_text)
 		{
-			unsigned          groups = 0;
-			std::stringstream stream(a_text);
-			std::string       part;
+			std::vector<std::string> groups;
+			std::stringstream        stream(a_text);
+			std::string              part;
 			while (std::getline(stream, part, ',')) {
 				part.erase(0, part.find_first_not_of(" \t"));
 				part.erase(part.find_last_not_of(" \t") + 1);
-				const std::string name = Lower(part);
-				if (name == "diag")
-					groups |= kDiag;
-				else if (name == "gps")
-					groups |= kGps;
-				else if (name == "others")
-					groups |= kOthers;
-				else if (name == "notif")
-					groups |= kNotif;
+				if (!part.empty())
+					groups.push_back(Lower(part));
 			}
 			return groups;
 		}
@@ -78,7 +71,7 @@ namespace abyssus::settings
 	Settings Parse(const std::string& a_text, const std::string& a_version, std::string& a_out, bool& a_changed)
 	{
 		Settings   result;
-		const auto update = iniupdate::Update(a_text, DefaultText(), a_version, { "configurations" });
+		const auto update = iniupdate::Update(a_text, DefaultText(), a_version, { "configurations", "groups", "order" });
 		a_out = update.text;
 		a_changed = update.changed;
 		result.added = update.added;
@@ -99,6 +92,17 @@ namespace abyssus::settings
 		result.configs = ConfigsOf(a_out);
 		if (result.configs.empty())
 			result.configs = DefaultConfigs();
+		for (const auto& [plugin, group] : iniupdate::Lines(a_out, "Groups")) {
+			if (!plugin.empty() && !group.empty())
+				result.groups[Lower(plugin)] = Lower(group);
+		}
+		for (const auto& [plugin, place] : iniupdate::Lines(a_out, "Order")) {
+			try {
+				result.order[Lower(plugin)] = std::stoi(place);
+			} catch (...) {
+				result.error = "bad place for " + plugin + " in [Order]: '" + place + "'";
+			}
+		}
 		result.startConfig = std::clamp(result.startConfig, 0, static_cast<int>(result.configs.size()) - 1);
 		return result;
 	}

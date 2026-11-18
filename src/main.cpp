@@ -19,6 +19,8 @@ namespace abyssus
 		"persistent-notes",  // SetNote: notes with no time limit
 		"stack",             // one stack at the top left, cycle key
 		"settings-file",     // AbyssusLib.ini with the cycle key and the configurations
+		"source-info",       // SetSourceInfo, [Groups] and [Order]: no plugin names in the code
+		"sized-data",        // window records start with their size
 	};
 }
 // Other plugins use include/Abyssus/API.h, which finds these exports at runtime.
@@ -54,6 +56,11 @@ extern "C" __declspec(dllexport) void AbyssusAPI_SetStatus(const char* a_source,
 extern "C" __declspec(dllexport) void AbyssusAPI_SetNote(const char* a_source, const char* a_id, const char* a_text, int a_level)
 {
 	abyssus::overlay::SetNote(a_source, a_id, a_text, a_level);
+}
+
+extern "C" __declspec(dllexport) void AbyssusAPI_SetSourceInfo(const char* a_source, const char* a_group, int a_order)
+{
+	abyssus::overlay::SetSourceInfo(a_source, a_group, a_order);
 }
 
 extern "C" __declspec(dllexport) void AbyssusAPI_SetWindow(const char* a_source, const char* a_id, const AbyssusWindow* a_window)
@@ -103,6 +110,8 @@ namespace
 		options.startConfig = g_settings.startConfig;
 		options.labelSeconds = g_settings.labelSeconds;
 		options.configs = g_settings.configs;
+		options.groups = g_settings.groups;
+		options.order = g_settings.order;
 		const bool ok = abyssus::overlay::Install(static_cast<void*>(window->swapChain), options);
 		logger::info("Notes: overlay {}", ok ? "ready" : "failed (Present hook)");
 	}
