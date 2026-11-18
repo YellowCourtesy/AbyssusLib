@@ -3,6 +3,8 @@
 // The stack of plugin windows, status lines and notes at the top left, and the
 // F11 cycle: Present hook and Dear ImGui on Direct3D 11. No CommonLibSSE.
 
+#include "Settings.h"
+
 struct AbyssusWindow;  // include/Abyssus/API.h
 
 namespace abyssus::overlay
@@ -11,6 +13,11 @@ namespace abyssus::overlay
 	{
 		// Gives the game UI render target view (ID3D11RenderTargetView*), or nullptr.
 		void* (*gameTarget)(){ nullptr };
+		// From AbyssusLib.ini.
+		int                           cycleKey{ 0x7A };  // F11
+		int                           startConfig{ 0 };
+		float                         labelSeconds{ 3.0f };
+		std::vector<settings::Config> configs{ settings::DefaultConfigs() };
 	};
 
 	// Hooks Present of the swap chain (IDXGISwapChain*). Call one time.

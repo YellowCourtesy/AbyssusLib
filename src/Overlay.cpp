@@ -77,25 +77,8 @@ namespace abyssus::overlay
 		constexpr float       kStackY = 10.0f;
 		constexpr float       kGap = 6.0f;
 
-		// F11 cycles these configurations. The windows of other plugins show
-		// when Notif shows.
-		struct Config
-		{
-			const char* name;
-			bool        diag;
-			bool        gps;
-			bool        notes;
-		};
-		constexpr Config kConfigs[] = {
-			{ "Diag / GPS / Notif", true, true, true },
-			{ "GPS / Notif", false, true, true },
-			{ "GPS", false, true, false },
-			{ "Notif", false, false, true },
-			{ "Off", false, false, false },
-		};
-		constexpr int   kConfigCount = static_cast<int>(sizeof(kConfigs) / sizeof(kConfigs[0]));
-		constexpr int   kCycleKey = VK_F11;
-		constexpr float kConfigLabelSeconds = 3.0f;
+		// The key cycles the configurations of AbyssusLib.ini (g_options.configs).
+		using settings::Config;
 
 		SRWLOCK                                     g_lock = SRWLOCK_INIT;
 		std::vector<Note>                           g_notes;       // the queue, oldest first; no limit
@@ -130,10 +113,16 @@ namespace abyssus::overlay
 		bool SourceVisible(const std::string& a_source, const Config& a_config)
 		{
 			if (a_source == kDiagSource)
-				return a_config.diag;
+				return (a_config.groups & settings::kDiag) != 0;
 			if (a_source == kGpsSource)
-				return a_config.gps;
-			return a_config.notes;
+				return (a_config.groups & settings::kGps) != 0;
+			return (a_config.groups & settings::kOthers) != 0;
+		}
+
+		const Config& CurrentConfig()
+		{
+			static const Config none{ "Off", 0 };
+			return g_options.configs.empty() ? none : g_options.configs[static_cast<std::size_t>(g_config) % g_options.configs.size()];
 		}
 
 		using PresentFn = HRESULT(STDMETHODCALLTYPE*)(IDXGISwapChain*, UINT, UINT);
@@ -169,14 +158,14 @@ namespace abyssus::overlay
 		// F11: the next configuration. Only when the game window is in front.
 		void UpdateCycleKey(const LARGE_INTEGER& a_now)
 		{
-			const bool down = (GetAsyncKeyState(kCycleKey) & 0x8000) != 0;
-			if (down && !g_keyWasDown && (!g_gameWindow || GetForegroundWindow() == g_gameWindow)) {
-				g_config = (g_config + 1) % kConfigCount;
-				g_configLabel = true;
+			const bool down = (GetAsyncKeyState(g_options.cycleKey) & 0x8000) != 0;
+			if (down && !g_keyWasDown && !g_options.configs.empty() && (!g_gameWindow || GetForegroundWindow() == g_gameWindow)) {
+				g_config = (g_config + 1) % static_cast<int>(g_options.configs.size());
+				g_configLabel = g_options.labelSeconds > 0.0f;
 				g_configLabelStart = a_now;
 			}
 			g_keyWasDown = down;
-			if (g_configLabel && Seconds(g_configLabelStart, a_now) > kConfigLabelSeconds)
+			if (g_configLabel && Seconds(g_configLabelStart, a_now) > g_options.labelSeconds)
 				g_configLabel = false;
 		}
 
@@ -340,7 +329,11 @@ namespace abyssus::overlay
 		{
 			LARGE_INTEGER now;
 			QueryPerformanceCounter(&now);
-			const Config& config = kConfigs[g_config];
+			const Config& config = CurrentConfig();
+			const bool    diag = (config.groups & settings::kDiag) != 0;
+			const bool    gps = (config.groups & settings::kGps) != 0;
+			const bool    others = (config.groups & settings::kOthers) != 0;
+			const bool    notes = (config.groups & settings::kNotif) != 0;
 
 			AcquireSRWLockExclusive(&g_lock);
 			std::erase_if(g_notes, [&](const Note& a_note) { return a_note.key.empty() && Seconds(a_note.start, now) > a_note.seconds; });
@@ -348,13 +341,15 @@ namespace abyssus::overlay
 
 			AcquireSRWLockShared(&g_lock);
 			float y = kStackY;
-			if (config.diag)
+			if (diag)
 				y = BuildSource(kDiagSource, y);
-			if (config.gps)
+			if (gps)
 				y = BuildSource(kGpsSource, y);
-			if (config.notes) {
+			if (others) {
 				for (const auto& source : g_otherSources)
 					y = BuildSource(source, y);
+			}
+			if (notes) {
 				// The window name is the place in the queue: ImGui keeps each window
 				// name for all of the session, so a name for each note would add up.
 				for (std::size_t i = 0; i < g_notes.size(); ++i) {
@@ -371,7 +366,7 @@ namespace abyssus::overlay
 				ImGui::SetNextWindowPos(ImVec2(a_screen.x * 0.5f, kStackY), ImGuiCond_Always, ImVec2(0.5f, 0.0f));
 				ImGui::SetNextWindowBgAlpha(0.65f);
 				if (ImGui::Begin("##AbyssusLibConfig", nullptr, kWindowFlags))
-					ImGui::TextColored(kSourceColor, "AbyssusLib (F11): %s", config.name);
+					ImGui::TextColored(kSourceColor, "AbyssusLib: %s", config.name.c_str());
 				ImGui::End();
 			}
 		}
@@ -381,10 +376,10 @@ namespace abyssus::overlay
 		{
 			if (g_configLabel)
 				return true;
-			const Config& config = kConfigs[g_config];
+			const Config& config = CurrentConfig();
 			bool          any = false;
 			AcquireSRWLockShared(&g_lock);
-			if (config.notes && !g_notes.empty())
+			if ((config.groups & settings::kNotif) != 0 && !g_notes.empty())
 				any = true;
 			for (auto it = g_windows.begin(); !any && it != g_windows.end(); ++it)
 				any = SourceVisible(it->second.source, config);
@@ -488,6 +483,7 @@ namespace abyssus::overlay
 	{
 		QueryPerformanceFrequency(&g_frequency);
 		g_options = a_options;
+		g_config = g_options.configs.empty() ? 0 : std::clamp(g_options.startConfig, 0, static_cast<int>(g_options.configs.size()) - 1);
 		return HookPresent(a_swapChain);
 	}
 

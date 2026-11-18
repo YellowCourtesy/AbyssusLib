@@ -1,7 +1,10 @@
 # AbyssusLib
 
-An SKSE plugin with shared services for other SKSE plugins (Skyrim AE 1.7.x).
+An SKSE plugin with shared services for other SKSE plugins. Version 2.0.0.
 License: GPL-3.0. Requires SKSE64 and Address Library for SKSE Plugins.
+
+**Game versions:** built with CommonLibSSE-NG for SE, AE and VR in one DLL.
+Tested only on AE 1.7.x. Other versions are not tested.
 
 ## The stack
 
@@ -19,20 +22,45 @@ left of the screen, drawn with Dear ImGui on Direct3D 11. From top to bottom:
 Each plugin: its windows, then its status line. The order is fixed in this
 version. Version 2.1 will read the order from a file.
 
-## F11
+## The cycle key and AbyssusLib.ini
 
-F11 cycles the configurations. The windows of other plugins show when Notif shows.
+A key (F11 by default) cycles the configurations. The settings are in
+`Data/SKSE/Plugins/AbyssusLib.ini`. AbyssusLib makes this file on the first
+launch; it is not in the mod package, so an update does not replace it.
 
-| Configuration | Diag | GPS | Other plugins and Notif |
-|---|---|---|---|
-| Diag / GPS / Notif (at start) | yes | yes | yes |
-| GPS / Notif | | yes | yes |
-| GPS | | yes | |
-| Notif | | | yes |
-| Off | | | |
+- `[Keys] iCycleKey`: the key (Windows virtual key code, `0x7A` = F11).
+- `[Stack] iStartConfig`: the configuration at the game start (1 = the first).
+- `[Stack] fLabelSeconds`: how long the name of a new configuration shows at
+  the top center (0 = never).
+- `[Configurations]`: one line for each configuration, in the order of the
+  cycle: `name = parts`. Parts: `Diag`, `GPS`, `Others` (all other plugins),
+  `Notif` (the notification queue).
 
-The name of the new configuration shows at the top center for 3 seconds. Notes
-that come while Notif is hidden are not shown, but their time runs.
+The default configurations:
+
+| Configuration | Diag | GPS | Others | Notif |
+|---|---|---|---|---|
+| Diag / GPS / Notif (at start) | yes | yes | yes | yes |
+| GPS / Notif | | yes | yes | yes |
+| GPS | | yes | | |
+| Notif | | | yes | yes |
+| Off | | | | |
+
+Notes that come while Notif is hidden are not shown, but their time runs.
+
+The second line of the file is `; Config version: x`. When a different
+version of AbyssusLib starts, it adds its new settings to the file in place,
+with their default values, and changes that line. Your values, comments and
+order stay. A message box at the main menu lists what was added.
+
+## Features and versions
+
+`abyssus::Has("name")` tells if the installed AbyssusLib has a feature:
+`notes`, `status`, `windows`, `persistent-notes`, `stack`, `settings-file`.
+Use it to decide what your plugin does. A newer AbyssusLib adds names and
+never removes one. `abyssus::VersionMismatch()` is true if the DLL has a
+different API version than your copy of the header: write it to your log, so
+that a version mismatch is easy to see.
 
 ## Windows (API version 2)
 
