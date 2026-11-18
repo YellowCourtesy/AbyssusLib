@@ -41,6 +41,7 @@ namespace abyssus::overlay
 			int           level{ 0 };
 			float         seconds{ 0.0f };
 			LARGE_INTEGER start{};
+			AbyssusColor  color{};  // a == 0: the color of the level
 		};
 
 		// A copy of an AbyssusItem, with its own text and values.
@@ -387,7 +388,8 @@ namespace abyssus::overlay
 					const Note& note = g_notes[i];
 					// Fade out in the last second. A note without time limit does not fade.
 					const float alpha = note.key.empty() ? std::clamp(note.seconds - Seconds(note.start, now), 0.0f, 1.0f) : 1.0f;
-					y = BuildLine("note" + std::to_string(i), note.source, note.text, LevelColor(note.level, alpha), y);
+					const ImVec4 color = note.color.a > 0.0f ? ImVec4(note.color.r, note.color.g, note.color.b, note.color.a * alpha) : LevelColor(note.level, alpha);
+					y = BuildLine("note" + std::to_string(i), note.source, note.text, color, y);
 				}
 			}
 			ReleaseSRWLockShared(&g_lock);
@@ -529,7 +531,7 @@ namespace abyssus::overlay
 		ReleaseSRWLockExclusive(&g_lock);
 	}
 
-	void SetNote(const char* a_source, const char* a_id, const char* a_text, int a_level)
+	void SetNote(const char* a_source, const char* a_id, const char* a_text, int a_level, const AbyssusColor& a_color)
 	{
 		const std::string source = a_source ? a_source : "";
 		const std::string key = source + "/" + (a_id ? a_id : "");
@@ -541,8 +543,9 @@ namespace abyssus::overlay
 		} else if (found != g_notes.end()) {
 			found->text = a_text;  // keeps its place in the queue
 			found->level = a_level;
+			found->color = a_color;
 		} else {
-			Note note{ key, source, a_text, a_level, 0.0f, {} };
+			Note note{ key, source, a_text, a_level, 0.0f, {}, a_color };
 			QueryPerformanceCounter(&note.start);
 			g_notes.push_back(std::move(note));
 		}

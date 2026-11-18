@@ -21,6 +21,7 @@ namespace abyssus
 		"settings-file",     // AbyssusLib.ini with the cycle key and the configurations
 		"source-info",       // SetSourceInfo, [Groups] and [Order]: no plugin names in the code
 		"sized-data",        // window records start with their size
+		"note-colors",       // SetNote with its own color (AbyssusAPI_SetNoteColor)
 	};
 }
 // Other plugins use include/Abyssus/API.h, which finds these exports at runtime.
@@ -55,7 +56,15 @@ extern "C" __declspec(dllexport) void AbyssusAPI_SetStatus(const char* a_source,
 
 extern "C" __declspec(dllexport) void AbyssusAPI_SetNote(const char* a_source, const char* a_id, const char* a_text, int a_level)
 {
-	abyssus::overlay::SetNote(a_source, a_id, a_text, a_level);
+	abyssus::overlay::SetNote(a_source, a_id, a_text, a_level, AbyssusColor{});
+}
+
+// A note without time limit, with its own color (a == 0: the color of the level).
+// Plain floats, not a struct: the parameters can never change their layout.
+extern "C" __declspec(dllexport) void AbyssusAPI_SetNoteColor(const char* a_source, const char* a_id, const char* a_text, int a_level, float a_r, float a_g,
+	float a_b, float a_a)
+{
+	abyssus::overlay::SetNote(a_source, a_id, a_text, a_level, AbyssusColor{ a_r, a_g, a_b, a_a });
 }
 
 extern "C" __declspec(dllexport) void AbyssusAPI_SetSourceInfo(const char* a_source, const char* a_group, int a_order)

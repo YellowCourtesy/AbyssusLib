@@ -23,8 +23,7 @@ from `[Groups]` and `[Order]` in `AbyssusLib.ini`, or from the plugin itself
 (`abyssus::SetSourceInfo("SkyGPS", "GPS", 200)`). A line in the ini wins. A
 plugin with no group, or with a group that no configuration names, is in
 "Others". The defaults: SkyrimDiagnostics = Diag, place 100; SkyGPS = GPS,
-place 200; SkyrimDiagnostics Warnings (its warnings box) = Diag, place 5000,
-directly above the notification queue.
+place 200.
 
 ## The cycle key and AbyssusLib.ini
 
@@ -66,7 +65,7 @@ order stay. A message box at the main menu lists what was added.
 
 `abyssus::Has("name")` tells if the installed AbyssusLib has a feature:
 `notes`, `status`, `windows`, `persistent-notes`, `stack`, `settings-file`,
-`source-info`, `sized-data`.
+`source-info`, `sized-data`, `note-colors`.
 Use it to decide what your plugin does. A newer AbyssusLib adds names and
 never removes one. `abyssus::VersionMismatch()` is true if the DLL has a
 different API version than your copy of the header: write it to your log, so

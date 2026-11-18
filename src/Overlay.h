@@ -6,6 +6,7 @@
 #include "Settings.h"
 
 struct AbyssusWindow;  // include/Abyssus/API.h
+struct AbyssusColor;
 
 namespace abyssus::overlay
 {
@@ -30,5 +31,5 @@ namespace abyssus::overlay
 	void SetStatus(const char* a_source, const char* a_text);
 	void SetWindow(const char* a_source, const char* a_id, const AbyssusWindow* a_window);
 	void SetSourceInfo(const char* a_source, const char* a_group, int a_order);
-	void SetNote(const char* a_source, const char* a_id, const char* a_text, int a_level);
+	void SetNote(const char* a_source, const char* a_id, const char* a_text, int a_level, const AbyssusColor& a_color);
 }
