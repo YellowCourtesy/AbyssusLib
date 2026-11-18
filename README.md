@@ -3,15 +3,35 @@
 An SKSE plugin with shared services for other SKSE plugins (Skyrim AE 1.7.x).
 License: GPL-3.0. Requires SKSE64 and Address Library for SKSE Plugins.
 
-## Notes and status lines
+## The stack
 
-A small box at the top of the screen, drawn with Dear ImGui on Direct3D 11, in
-place of the game's notification queue.
+All windows, status lines and notes of all plugins go into one stack at the top
+left of the screen, drawn with Dear ImGui on Direct3D 11. From top to bottom:
 
-- **Notes:** all plugins share one note. A new note replaces the note that shows
-  (the same rule as SkyrimDiagnostics), so a note is never minutes old.
-- **Status lines:** each plugin can show one permanent line, until it changes or
-  clears it.
+1. **Diag:** SkyrimDiagnostics (its data window and its warnings)
+2. **GPS:** SkyGPS (its status line, only while navigation is active)
+3. **Other plugins:** in the order in which they first showed a window or a
+   status line
+4. **Notif:** the notification queue, oldest note at the top. Each note shows
+   until its time ends. No limit.
+
+Each plugin: its windows, then its status line. The order is fixed in this
+version. Version 2.1 will read the order from a file.
+
+## F11
+
+F11 cycles the configurations. The windows of other plugins show when Notif shows.
+
+| Configuration | Diag | GPS | Other plugins and Notif |
+|---|---|---|---|
+| Diag / GPS / Notif (at start) | yes | yes | yes |
+| GPS / Notif | | yes | yes |
+| GPS | | yes | |
+| Notif | | | yes |
+| Off | | | |
+
+The name of the new configuration shows at the top center for 3 seconds. Notes
+that come while Notif is hidden are not shown, but their time runs.
 
 ## Windows (API version 2)
 
@@ -19,9 +39,8 @@ A plugin can show its own windows. The plugin sends the content as data:
 colored text, line ends, separators and line graphs. AbyssusLib draws it. The
 plugin has no Dear ImGui and no Present hook for drawing.
 
-- A window shows until the plugin changes or clears it.
-- `below`: the id of another window of the same plugin. If that window shows,
-  this window goes below it. If not, at its own position.
+- A window shows until the plugin changes or clears it. A change keeps its place.
+- `below`: the id of another window of the same plugin. This window goes after it.
 
 ## Use from another plugin
 
@@ -43,7 +62,7 @@ b.Text(abyssus::WindowBuilder::kDefault, "FPS ");
 b.Text({ 1.0f, 0.35f, 0.3f, 1.0f }, "%.0f", fps);  // same line, red
 b.NewLine();
 b.Graph(values, count, 0.0f, 50.0f, 380.0f, 50.0f);
-const AbyssusWindow w = b.Make(10.0f, 10.0f);  // top left corner, pixels
+const AbyssusWindow w = b.Make();  // AbyssusLib puts it into the stack
 abyssus::SetWindow("MyMod", "main", &w);
 abyssus::ClearWindow("MyMod", "main");
 ```

@@ -1,7 +1,7 @@
 #pragma once
 
-// The note box and the plugin windows: Present hook and Dear ImGui on Direct3D 11.
-// No CommonLibSSE.
+// The stack of plugin windows, status lines and notes at the top left, and the
+// F11 cycle: Present hook and Dear ImGui on Direct3D 11. No CommonLibSSE.
 
 struct AbyssusWindow;  // include/Abyssus/API.h
 
@@ -11,8 +11,6 @@ namespace abyssus::overlay
 	{
 		// Gives the game UI render target view (ID3D11RenderTargetView*), or nullptr.
 		void* (*gameTarget)(){ nullptr };
-		float x{ 0.5f };   // horizontal center of the box, part of the screen width
-		float y{ 0.08f };  // top of the box, part of the screen height
 	};
 
 	// Hooks Present of the swap chain (IDXGISwapChain*). Call one time.
