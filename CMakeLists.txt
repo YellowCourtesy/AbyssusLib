@@ -14,6 +14,12 @@ set(ENABLE_SKYRIM_AE ON CACHE BOOL "" FORCE)
 set(ENABLE_SKYRIM_VR ON CACHE BOOL "" FORCE)
 set(BUILD_TESTS OFF CACHE BOOL "" FORCE)
 add_subdirectory(lib/commonlibsse-ng EXCLUDE_FROM_ALL)
+# CommonLibSSE loads its plugin helper (add_commonlibsse_plugin) only when it
+# uses a prebuilt binary. When it builds from source (for example, the build
+# machine has a newer compiler than the prebuilt binary), load the helper here.
+if(NOT COMMAND add_commonlibsse_plugin)
+	include("${CMAKE_CURRENT_SOURCE_DIR}/lib/commonlibsse-ng/cmake/CommonLibSSE.cmake")
+endif()
 include(lib/commonlibsse-ng/cmake/CommonLibSSE.cmake)
 
 find_package(imgui CONFIG REQUIRED)
