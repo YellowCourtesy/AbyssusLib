@@ -32,6 +32,7 @@ namespace abyssus::overlay
 	{
 		struct Note
 		{
+			std::string   key;  // "source/id" of a note without time limit, else empty
 			std::string   source;
 			std::string   text;
 			int           level{ 0 };
@@ -342,7 +343,7 @@ namespace abyssus::overlay
 			const Config& config = kConfigs[g_config];
 
 			AcquireSRWLockExclusive(&g_lock);
-			std::erase_if(g_notes, [&](const Note& a_note) { return Seconds(a_note.start, now) > a_note.seconds; });
+			std::erase_if(g_notes, [&](const Note& a_note) { return a_note.key.empty() && Seconds(a_note.start, now) > a_note.seconds; });
 			ReleaseSRWLockExclusive(&g_lock);
 
 			AcquireSRWLockShared(&g_lock);
@@ -358,7 +359,8 @@ namespace abyssus::overlay
 				// name for all of the session, so a name for each note would add up.
 				for (std::size_t i = 0; i < g_notes.size(); ++i) {
 					const Note& note = g_notes[i];
-					const float alpha = std::clamp(note.seconds - Seconds(note.start, now), 0.0f, 1.0f);  // fade out in the last second
+					// Fade out in the last second. A note without time limit does not fade.
+					const float alpha = note.key.empty() ? std::clamp(note.seconds - Seconds(note.start, now), 0.0f, 1.0f) : 1.0f;
 					y = BuildLine("note" + std::to_string(i), note.source, note.text, LevelColor(note.level, alpha), y);
 				}
 			}
@@ -493,10 +495,30 @@ namespace abyssus::overlay
 	{
 		if (!a_text || !*a_text)
 			return;
-		Note note{ a_source ? a_source : "", a_text, a_level, a_seconds, {} };
+		Note note{ {}, a_source ? a_source : "", a_text, a_level, a_seconds, {} };
 		QueryPerformanceCounter(&note.start);
 		AcquireSRWLockExclusive(&g_lock);
 		g_notes.push_back(std::move(note));  // the queue: each note shows until its time ends
+		ReleaseSRWLockExclusive(&g_lock);
+	}
+
+	void SetNote(const char* a_source, const char* a_id, const char* a_text, int a_level)
+	{
+		const std::string source = a_source ? a_source : "";
+		const std::string key = source + "/" + (a_id ? a_id : "");
+		AcquireSRWLockExclusive(&g_lock);
+		const auto found = std::find_if(g_notes.begin(), g_notes.end(), [&](const Note& a_note) { return a_note.key == key; });
+		if (!a_text || !*a_text) {
+			if (found != g_notes.end())
+				g_notes.erase(found);
+		} else if (found != g_notes.end()) {
+			found->text = a_text;  // keeps its place in the queue
+			found->level = a_level;
+		} else {
+			Note note{ key, source, a_text, a_level, 0.0f, {} };
+			QueryPerformanceCounter(&note.start);
+			g_notes.push_back(std::move(note));
+		}
 		ReleaseSRWLockExclusive(&g_lock);
 	}
 

@@ -20,6 +20,11 @@ extern "C" __declspec(dllexport) void AbyssusAPI_SetStatus(const char* a_source,
 	abyssus::overlay::SetStatus(a_source, a_text);
 }
 
+extern "C" __declspec(dllexport) void AbyssusAPI_SetNote(const char* a_source, const char* a_id, const char* a_text, int a_level)
+{
+	abyssus::overlay::SetNote(a_source, a_id, a_text, a_level);
+}
+
 extern "C" __declspec(dllexport) void AbyssusAPI_SetWindow(const char* a_source, const char* a_id, const AbyssusWindow* a_window)
 {
 	abyssus::overlay::SetWindow(a_source, a_id, a_window);

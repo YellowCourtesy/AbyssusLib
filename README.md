@@ -13,7 +13,8 @@ left of the screen, drawn with Dear ImGui on Direct3D 11. From top to bottom:
 3. **Other plugins:** in the order in which they first showed a window or a
    status line
 4. **Notif:** the notification queue, oldest note at the top. Each note shows
-   until its time ends. No limit.
+   until its time ends. No limit. A note from `SetNote` has no time limit: it
+   stays until its plugin changes or clears it.
 
 Each plugin: its windows, then its status line. The order is fixed in this
 version. Version 2.1 will read the order from a file.
@@ -54,6 +55,8 @@ if (abyssus::IsAvailable())  // at or after SKSE kPostLoad
     abyssus::Notify("MyMod", "Something happened", 5.0f);
 abyssus::SetStatus("MyMod", "Working: step 2 of 5");
 abyssus::SetStatus("MyMod", nullptr);  // clear
+abyssus::SetNote("MyMod", "limit", "Over the limit", abyssus::Level::kError);  // no time limit
+abyssus::ClearNote("MyMod", "limit");
 
 // Windows: AbyssusLib 2 or later.
 static abyssus::WindowBuilder b;

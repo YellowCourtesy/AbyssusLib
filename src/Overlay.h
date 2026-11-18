@@ -20,4 +20,5 @@ namespace abyssus::overlay
 	void Notify(const char* a_source, const char* a_text, float a_seconds, int a_level);
 	void SetStatus(const char* a_source, const char* a_text);
 	void SetWindow(const char* a_source, const char* a_id, const AbyssusWindow* a_window);
+	void SetNote(const char* a_source, const char* a_id, const char* a_text, int a_level);
 }
