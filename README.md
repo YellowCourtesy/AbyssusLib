@@ -26,7 +26,9 @@ version. Version 2.1 will read the order from a file.
 
 A key (F11 by default) cycles the configurations. The settings are in
 `Data/SKSE/Plugins/AbyssusLib.ini`. AbyssusLib makes this file on the first
-launch; it is not in the mod package, so an update does not replace it.
+launch; it is not in the mod package, so an update does not replace it. The default text is
+`AbyssusLib.ini` at the top level of this repository: the build puts it into
+the DLL, so edit that file to change the defaults.
 
 - `[Keys] iCycleKey`: the key (Windows virtual key code, `0x7A` = F11).
 - `[Stack] iStartConfig`: the configuration at the game start (1 = the first).

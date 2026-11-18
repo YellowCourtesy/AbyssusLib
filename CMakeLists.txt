@@ -18,15 +18,25 @@ include(lib/commonlibsse-ng/cmake/CommonLibSSE.cmake)
 
 find_package(imgui CONFIG REQUIRED)
 
+# The default settings: AbyssusLib.ini at the top level. Its bytes go into
+# the DLL. Edit that file to change the defaults.
+set(ABYSSUS_INI "${CMAKE_CURRENT_SOURCE_DIR}/AbyssusLib.ini")
+set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS "${ABYSSUS_INI}")
+file(READ "${ABYSSUS_INI}" ABYSSUS_INI_HEX HEX)
+string(REGEX REPLACE "([0-9a-f][0-9a-f])" "0x\\1," ABYSSUS_INI_BYTES "${ABYSSUS_INI_HEX}")
+file(MAKE_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}/generated")
+file(WRITE "${CMAKE_CURRENT_BINARY_DIR}/generated/DefaultIni.inc"
+    "// Made by CMake from AbyssusLib.ini. Do not change.\nstatic const unsigned char kDefaultIni[] = { ${ABYSSUS_INI_BYTES} 0x00 };\n")
+
 add_commonlibsse_plugin(${PROJECT_NAME}
     NAME "AbyssusLib"
     AUTHOR "AbyssusLib contributors"
     USE_ADDRESS_LIBRARY
-    SOURCES src/main.cpp src/Overlay.cpp src/Overlay.h src/Settings.cpp src/Settings.h src/PCH.h include/Abyssus/API.h
+    SOURCES src/main.cpp src/Overlay.cpp src/Overlay.h src/Settings.cpp src/Settings.h src/IniUpdate.cpp src/IniUpdate.h src/PCH.h include/Abyssus/API.h
 )
 
 target_compile_features(${PROJECT_NAME} PRIVATE cxx_std_23)
-target_include_directories(${PROJECT_NAME} PRIVATE src include)
+target_include_directories(${PROJECT_NAME} PRIVATE src include "${CMAKE_CURRENT_BINARY_DIR}/generated")
 target_compile_definitions(${PROJECT_NAME} PRIVATE NOMINMAX WIN32_LEAN_AND_MEAN ABYSSUS_VERSION="${PROJECT_VERSION}")
 target_precompile_headers(${PROJECT_NAME} PRIVATE src/PCH.h)
 # Overlay.cpp uses windows.h and Direct3D directly, not CommonLibSSE.
