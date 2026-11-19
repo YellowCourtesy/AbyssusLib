@@ -6,6 +6,8 @@
 
 #include <cstring>
 
+#include <spdlog/sinks/basic_file_sink.h>
+
 // AbyssusLib: shared services for the author's SKSE plugins.
 
 namespace abyssus
@@ -86,14 +88,34 @@ namespace
 		return renderer ? static_cast<void*>(renderer->GetRuntimeData().renderTargets[RE::RENDER_TARGETS::kFRAMEBUFFER].RTV) : nullptr;
 	}
 
-	// Data/SKSE/Plugins/AbyssusLib.ini in the game folder (not from the
-	// current folder of the process, which a launcher can change).
+	// The folder of AbyssusLib's own files: Data/SKSE/Plugins/AbyssusLib/AbyssusLib (see
+	// abyssus::ModFolder in the header; all mods that use AbyssusLib keep their files in
+	// Data/SKSE/Plugins/AbyssusLib/<mod>).
+	const std::filesystem::path& Folder()
+	{
+		static const std::filesystem::path folder = abyssus::ModFolder("AbyssusLib");
+		return folder;
+	}
+
+	// AbyssusLib.ini in that folder. The file of version 2.0.0 (Data/SKSE/Plugins/AbyssusLib.ini)
+	// is copied there the first time, so the user's settings stay.
 	std::filesystem::path IniPath()
 	{
-		wchar_t    buffer[1024] = L"";
-		const auto length = REX::W32::GetModuleFileNameW(nullptr, buffer, static_cast<std::uint32_t>(std::size(buffer)));
-		const std::filesystem::path game = length > 0 && length < std::size(buffer) ? std::filesystem::path(buffer).parent_path() : std::filesystem::path{};
-		return game / "Data" / "SKSE" / "Plugins" / "AbyssusLib.ini";
+		const auto path = Folder() / "AbyssusLib.ini";
+		if (abyssus::AdoptOldFile(Folder().parent_path().parent_path() / "AbyssusLib.ini", path))
+			logger::info("Settings: copied Data/SKSE/Plugins/AbyssusLib.ini to {} (the old file is no longer used)", path.string());
+		return path;
+	}
+
+	// AbyssusLib.log in the folder (not in the SKSE log folder in Documents).
+	void SetupLog()
+	{
+		auto sink = std::make_shared<spdlog::sinks::basic_file_sink_mt>((Folder() / "AbyssusLib.log").string(), true);
+		auto log = std::make_shared<spdlog::logger>("global", std::move(sink));
+		log->set_level(spdlog::level::info);
+		log->flush_on(spdlog::level::info);
+		spdlog::set_default_logger(std::move(log));
+		spdlog::set_pattern("[%T.%e] [%=5t] [%L] %v");
 	}
 
 	abyssus::settings::Settings g_settings;
@@ -128,15 +150,17 @@ namespace
 
 SKSEPluginLoad(const SKSE::LoadInterface* a_skse)
 {
-	SKSE::Init(a_skse);
+	SKSE::Init(a_skse, { .log = false });
+	SetupLog();
 	logger::info("AbyssusLib {} on Skyrim {}", ABYSSUS_VERSION, REL::Module::get().version().string());
-	g_settings = abyssus::settings::Load(IniPath(), ABYSSUS_VERSION);
+	const auto iniPath = IniPath();
+	g_settings = abyssus::settings::Load(iniPath, ABYSSUS_VERSION);
 	if (!g_settings.error.empty())
 		logger::error("Settings: {}", g_settings.error);
 	std::string added;
 	for (const auto& item : g_settings.added)
 		added += (added.empty() ? "" : ", ") + item;
-	logger::info("Settings: {} (version before: {}), key 0x{:X}, {} configurations, start: {}. Added: {}", IniPath().string(),
+	logger::info("Settings: {} (version before: {}), key 0x{:X}, {} configurations, start: {}. Added: {}", iniPath.string(),
 		g_settings.oldVersion.empty() ? "none" : g_settings.oldVersion, g_settings.cycleKey, g_settings.configs.size(),
 		g_settings.configs.empty() ? "-" : g_settings.configs[static_cast<std::size_t>(g_settings.startConfig)].name, added.empty() ? "nothing" : added);
 	SKSE::GetMessagingInterface()->RegisterListener(OnMessage);

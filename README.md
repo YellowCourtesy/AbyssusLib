@@ -28,7 +28,9 @@ place 200.
 ## The cycle key and AbyssusLib.ini
 
 A key (F11 by default) cycles the configurations. The settings are in
-`Data/SKSE/Plugins/AbyssusLib.ini`. AbyssusLib makes this file on the first
+`Data/SKSE/Plugins/AbyssusLib/AbyssusLib/AbyssusLib.ini` (see "One folder for
+all mods" below; the file of version 2.0.0 in `Data/SKSE/Plugins` is copied there
+the first time). AbyssusLib makes this file on the first
 launch; it is not in the mod package, so an update does not replace it. The default text is
 `AbyssusLib.ini` at the top level of this repository: the build puts it into
 the DLL, so edit that file to change the defaults.
@@ -83,6 +85,16 @@ plugin has no Dear ImGui and no Present hook for drawing.
   old and new plugins work with old and new AbyssusLib versions. Rule for a
   new field: only at the end of the record, and 0 means "default".
 - `below`: the id of another window of the same plugin. This window goes after it.
+
+## One folder for all mods
+
+All mods that use AbyssusLib keep all their files (log, INI, data) in one folder,
+with one folder for each mod: `Data/SKSE/Plugins/AbyssusLib/<mod>/`. The header
+function `abyssus::ModFolder("<mod>")` gives the folder and makes it. It works
+before `AbyssusLib.dll` is loaded and also when AbyssusLib is not installed, so a
+mod can use it for its log at the start. With Mod Organizer 2, new files in the
+Data folder go to the overwrite folder. `abyssus::AdoptOldFile(old, new)` copies a
+file of an older mod version (for example its INI) into the folder one time.
 
 ## Use from another plugin
 
